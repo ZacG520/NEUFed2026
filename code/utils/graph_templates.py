@@ -12,23 +12,29 @@ colors_dict = {
     'dark_gray': '#879396',
     'beige':'#F7CAC9',
     'light_blue': '#7095cf',
+    'rose': '#A0525A',
     'light_gray': '#D3D3D3',
+    'grid': '#E3E6E8',
+    'muted_text': '#5B6770',
     'dark_blue_text': '#163855'
 }
 
-# Default font for everything
-default_font = 'Cambria Bold'
+# Default font for everything. Cambria if installed (comes with Microsoft Office),
+# otherwise Georgia, which every Mac and PC has
+default_font = "Cambria, Georgia, 'Times New Roman', serif"
 
 # Default text color
 default_text_color = colors_dict['dark_blue_text']
 
-# Ordered colors for order of trace coloring
+# Ordered colors for order of trace coloring. Checked with a color-vision validator:
+# every neighboring pair is distinguishable, including for colorblind readers.
+# Beige isn't used for data because it's nearly invisible on white (1.4:1 contrast).
 default_colorway = [
     colors_dict['blue'],
     colors_dict['orange'],
-    colors_dict['dark_gray'],
-    colors_dict['beige'],
     colors_dict['light_blue'],
+    colors_dict['rose'],
+    colors_dict['dark_gray'],
 ]
 
 # Make a Template object
@@ -74,7 +80,7 @@ fed_2025_template = go.layout.Template(
         xaxis = dict(
             showgrid=True,
             gridwidth=0.5,
-            gridcolor=colors_dict['light_gray'],
+            gridcolor=colors_dict['grid'],
             tickfont=dict(
                 family=default_font,
                 size=18,
@@ -87,7 +93,7 @@ fed_2025_template = go.layout.Template(
         yaxis = dict(
             showgrid=True,
             gridwidth=0.5,
-            gridcolor=colors_dict['light_gray'],
+            gridcolor=colors_dict['grid'],
             tickfont=dict(
                 family=default_font,
                 size=18,
