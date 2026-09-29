@@ -23,7 +23,8 @@ Open **`make_graph.ipynb`** in the NEUFed2026 folder.
 
 **Data sources**
 - **FRED:** type series IDs, like `"CPIAUCSL, CPILFESL"`, or `{"Headline CPI": "CPIAUCSL"}` to name the lines yourself. The ID is the code at the end of a FRED page's URL.
-- **Excel / CSV:** put the file in `code/data/` and type its name, like `"gdp_contrib.csv"`. Title rows, footnotes, odd date formats (`202301`, `2023Q1`, separate Year/Quarter columns) and `na` values are handled automatically. The Load data cell prints what it detected so you can check it.
+- **Several sources at once:** use a list, like `["umich_1y.csv", "umich5y.csv", {"Core PCE": "PCEPILFE"}]`. Dates are lined up automatically, and repeated column names get the file name added, e.g. `Median (umich5y)`.
+- **Excel / CSV:** put the file in `DATA2026/` and type its name, like `"NFCI.csv"`. (Files in the older `code/data/` folder are found too.) Title rows, footnotes, odd date formats (`202301`, `2023Q1`, separate Year/Quarter columns) and `na` values are handled automatically. The Load data cell prints what it detected so you can check it.
 
 **Chart types:** `line`, `contribution` (stacked bars with a total line, e.g. GDP contributions), `bar` (grouped or stacked), and `dual_axis`. The bottom of the notebook has a ready-to-paste example for each.
 
@@ -46,7 +47,8 @@ code/graph_tool/          the code behind it
     charts.py               builds each chart type, saves PNGs
 code/utils/               team Plotly template (graph_templates.py) and helpers
 code/*.ipynb              one notebook per graph (older, custom graphs)
-code/data/                data files that don't come from FRED
+DATA2026/                 data files for make_graph.ipynb
+code/data/                data files used by the older per-graph notebooks
 figures/                  saved graphs (.html from notebooks, png/ from make_graph)
 ```
 

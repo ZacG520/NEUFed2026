@@ -51,6 +51,10 @@ MONTH_NAMES = {m.lower(): i for i, m in enumerate(
 
 CODE_DIR = Path(__file__).resolve().parent.parent  # the repo's code/ folder
 
+# Folders searched (in order) when DATA is just a file name. DATA2026 is the main data
+# folder; code/data is kept because the older per-graph notebooks read from it.
+DATA_DIRS = [CODE_DIR.parent / "DATA2026", CODE_DIR / "data"]
+
 
 # ---------------------------------------------------------------------------
 # Public functions
@@ -62,12 +66,15 @@ def load_data(source, **kwargs) -> pd.DataFrame:
         load_data("CPIAUCSL, CPILFESL", units="yoy")      -> FRED
         load_data({"Headline": "CPIAUCSL"})                -> FRED, with labels
         load_data("data/gdp_contrib.csv")                  -> file
+        load_data(["a.csv", "b.xlsx", {"PCE": "PCEPI"}])   -> several sources, combined
     kwargs are passed through to load_fred() or load_file(). Options that only apply to
     the other kind of source (e.g. units= for a file) are ignored, so a settings cell can
     list everything. columns= works for both.
     """
     kwargs = {k: v for k, v in kwargs.items() if v is not None}
-    if isinstance(source, (str, Path)) and Path(str(source)).suffix.lower() in (".csv", ".txt", ".xlsx", ".xlsm", ".xls"):
+    if _is_multi_source(source):
+        return _load_multiple(source, kwargs)
+    if _is_file(source):
         allowed = {"sheet", "header_row", "date_col", "columns", "start", "end", "verbose"}
         return load_file(source, **{k: v for k, v in kwargs.items() if k in allowed})
 
@@ -76,6 +83,81 @@ def load_data(source, **kwargs) -> pd.DataFrame:
     if kwargs.get("columns") is not None:
         df = _select_columns(df, kwargs["columns"])
     return df
+
+
+FILE_TYPES = (".csv", ".txt", ".xlsx", ".xlsm", ".xls")
+
+
+def _is_file(source) -> bool:
+    return isinstance(source, (str, Path)) and Path(str(source)).suffix.lower() in FILE_TYPES
+
+
+def _is_multi_source(source) -> bool:
+    """A list with any file or dict in it. (A list of plain FRED IDs is one FRED request.)"""
+    return isinstance(source, (list, tuple)) and any(_is_file(s) or isinstance(s, dict) for s in source)
+
+
+def _load_multiple(sources, kwargs) -> pd.DataFrame:
+    """
+    Loads each source with the shared settings and combines them side by side by date.
+    Each item can be a file name, FRED ID(s), a FRED {"Label": "ID"} dict, or a file
+    with its own options: {"file": "x.xlsx", "sheet": "Data", "columns": {...}}.
+    Shared columns= is applied after combining.
+    """
+    columns = kwargs.pop("columns", None)
+    verbose = kwargs.get("verbose", True)
+    frames = []
+    for n, item in enumerate(sources, start=1):
+        if isinstance(item, dict) and "file" in item:
+            options = {**kwargs, **{k: v for k, v in item.items() if k != "file"}}
+            item, name = item["file"], Path(item["file"]).stem
+        else:
+            options = dict(kwargs)
+            name = Path(str(item)).stem if _is_file(item) else f"source {n}"
+        if verbose:
+            print(f"Source {n}: {item}")
+        df = load_data(item, **options)
+        df, note = _align_to_period_start(df)
+        if note and verbose:
+            print("  " + note)
+        frames.append((name, df))
+
+    # Same column name in two sources: keep the first, label later ones with their source
+    taken = set()
+    combined = []
+    for name, df in frames:
+        renames = {c: f"{c} ({name})" for c in df.columns if c in taken}
+        if renames and verbose:
+            print(f"  Renamed repeated columns from {name}: {list(renames.values())}")
+        df = df.rename(columns=renames)
+        taken.update(df.columns)
+        combined.append(df)
+
+    df = pd.concat(combined, axis=1, join="outer").sort_index()
+    df.index.name = "Date"
+    if columns is not None:
+        df = _select_columns(df, columns)
+    return df.dropna(how="all")
+
+
+def _align_to_period_start(df):
+    """
+    Moves monthly/quarterly/annual dates to the first day of the period, so sources that
+    date the same month differently (2024-01-31 vs 2024-01-01) line up when combined.
+    """
+    freq = _guess_frequency(df.index)
+    code = {"monthly": "M", "quarterly": "Q", "annual": "Y"}.get(freq)
+    if code is None:
+        return df, None
+    aligned = df.index.to_period(code).to_timestamp()
+    if aligned.equals(df.index):
+        return df, None
+    if aligned.duplicated().any():
+        return df, f"Warning: dates not moved to period start ({freq} data has repeated periods)"
+    df = df.copy()
+    df.index = aligned
+    df.index.name = "Date"
+    return df, f"Moved {freq} dates to the start of each period (e.g. {aligned[-1]:%Y-%m-%d}) to line up with other sources"
 
 
 def load_fred(series, start=None, end=None, units="level", frequency=None,
@@ -134,7 +216,7 @@ def load_file(path, sheet=None, header_row=None, date_col=None, columns=None,
 
     Parameters:
         path: file path. Relative paths are checked against the current folder,
-              then code/, then code/data/.
+              then DATA2026/, then code/data/, then code/.
         sheet: Excel sheet name or number. Default: first sheet that contains data.
         header_row: row number (0 = first row) holding the column names. Default: auto.
         date_col: column name holding the dates, or a list of two names for split
@@ -184,10 +266,10 @@ def preview(df: pd.DataFrame) -> None:
 
 def _resolve_path(path) -> Path:
     path = Path(path).expanduser()
-    for candidate in (path, CODE_DIR / path, CODE_DIR / "data" / path):
+    for candidate in (path, *(folder / path for folder in DATA_DIRS), CODE_DIR / path):
         if candidate.exists():
             return candidate
-    raise FileNotFoundError(f"Couldn't find '{path}'. Put it in code/data/ or give the full path.")
+    raise FileNotFoundError(f"Couldn't find '{path}'. Put it in the DATA2026 folder or give the full path.")
 
 
 def _read_csv_raw(path: Path) -> pd.DataFrame:

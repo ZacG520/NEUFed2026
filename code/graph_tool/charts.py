@@ -51,7 +51,7 @@ def make_chart(df: pd.DataFrame, chart_type: str = "line", *,
                columns=None, labels=None, colors=None,
                start=None, end=None,
                y_suffix="", y_prefix="", decimals=None, y_range=None, x_format=None,
-               ref_lines=None, recessions=False, end_labels=None,
+               ref_lines=None, vlines=None, recessions=False, end_labels=None,
                legend=None, width=WIDTH, height=HEIGHT,
                **type_options) -> go.Figure:
     """
@@ -70,6 +70,8 @@ def make_chart(df: pd.DataFrame, chart_type: str = "line", *,
         y_range: [min, max] for the y-axis
         x_format: date tick format, e.g. "%Y", "%b %Y", "Q%q %Y" (default: automatic)
         ref_lines: horizontal dashed line(s): 2, [0, 2], or {2: "2% target"}
+        vlines: vertical dashed line(s) at dates: "2020-03-01", ["2020-03-01", "2022-03-16"],
+                or {"2022-03-16": "First hike"}
         recessions: True to shade U.S. recessions (NBER, via FRED)
         end_labels: show the latest value at the end of each line (default: on for <= 4 lines)
         legend: "top", "bottom", "right", or "none" (default: chosen from the number of series)
@@ -117,6 +119,8 @@ def make_chart(df: pd.DataFrame, chart_type: str = "line", *,
 
     if ref_lines is not None:
         _add_ref_lines(fig, ref_lines, y_suffix, y_prefix, fmt)
+    if vlines is not None:
+        _add_vlines(fig, vlines)
     if recessions:
         source = _add_recessions(fig, df.index, source)
 
@@ -490,6 +494,26 @@ def _add_ref_lines(fig, ref_lines, suffix, prefix, fmt):
         fig.add_hline(y=value, line=dict(color=MUTED_TEXT, width=1.5, dash="dash"), layer="below")
         if label:
             fig.add_annotation(x=0.005, xref="paper", y=value, yanchor="bottom", xanchor="left",
+                               text=label, showarrow=False, bgcolor="rgba(255,255,255,0.85)",
+                               font=dict(family=FONT, size=15, color=MUTED_TEXT))
+
+
+def _add_vlines(fig, vlines):
+    """Vertical dashed line(s) at dates, each with an optional label at the top of the plot."""
+    if isinstance(vlines, (str, pd.Timestamp)):
+        vlines = {vlines: ""}
+    elif isinstance(vlines, (list, tuple)):
+        vlines = {v: "" for v in vlines}
+    for date, label in vlines.items():
+        try:
+            x = pd.Timestamp(date)
+        except ValueError:
+            raise ValueError(f"Vertical line date {date!r} isn't a date. Use \"YYYY-MM-DD\", e.g. \"2020-03-01\".") from None
+        has_bars = any(t.type == "bar" for t in fig.data)  # draw over bars so they don't hide it
+        fig.add_shape(type="line", x0=x, x1=x, xref="x", y0=0, y1=1, yref="paper",
+                      line=dict(color=MUTED_TEXT, width=1.5, dash="dash"), layer="above" if has_bars else "below")
+        if label:
+            fig.add_annotation(x=x, xref="x", y=1, yref="paper", xanchor="left", yanchor="top", xshift=4,
                                text=label, showarrow=False, bgcolor="rgba(255,255,255,0.85)",
                                font=dict(family=FONT, size=15, color=MUTED_TEXT))
 
